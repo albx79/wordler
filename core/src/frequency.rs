@@ -32,5 +32,9 @@ fn of(letter: char) -> f64 {
 }
 
 pub fn score(word: &str) -> f64 {
-    word.chars().map(|c| of(c)).fold(1.0, |a, b| a * b)
+    use itertools::Itertools;
+    word.chars()
+        .unique()
+        .map(|c| of(c))
+        .fold(0.0, |a, b| a + b)
 }

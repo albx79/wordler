@@ -1,0 +1,9 @@
+[package]
+name = "wordler-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+itertools = "0.10"
