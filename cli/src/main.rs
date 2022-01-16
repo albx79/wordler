@@ -1,4 +1,4 @@
-use wordler_core::{Game, Filter};
+use wordler_core::{Filter, Game};
 
 fn main() {
     let mut game = Game::default();
@@ -13,14 +13,19 @@ fn main() {
         };
         println!("Try {}", word);
         loop {
-            println!(r#"
+            println!(
+                r#"
 Enter the game response using:
 "G" or "g" for a Green letter (you got it in the right position)
 "Y" or "y" for a Yellow letter (you got it, but in the wrong position)
-"." for a grey letter (you didn't get it)"#);
+"." for a grey letter (you didn't get it)"#
+            );
             let response = match promptly::prompt::<String, _>("Response") {
                 Ok(r) => r,
-                _ => { println!("Bye!"); return; }
+                _ => {
+                    println!("Bye!");
+                    return;
+                }
             };
             match str_to_filter(&response, word) {
                 Some(filters) => {
@@ -59,8 +64,14 @@ mod tests {
         assert_eq!(
             str_to_filter("yG", "WORD").unwrap(),
             vec![
-                Filter::Yellow { letter: b'W', position: 0 },
-                Filter::Green { letter: b'O', position: 1 }
+                Filter::Yellow {
+                    letter: b'W',
+                    position: 0
+                },
+                Filter::Green {
+                    letter: b'O',
+                    position: 1
+                }
             ]
         );
     }

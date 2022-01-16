@@ -35,6 +35,6 @@ pub fn score(word: &str) -> f64 {
     use itertools::Itertools;
     word.chars()
         .unique()
-        .map(|c| of(c))
+        .map(of)
         .fold(0.0, |a, b| a + b)
 }
