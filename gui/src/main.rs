@@ -1,6 +1,6 @@
 use wordler_core::{Filter, Game};
 use eframe::{egui, epi};
-use eframe::egui::{CtxRef, Stroke, RichText};
+use eframe::egui::{CtxRef, RichText};
 use eframe::epi::Frame;
 
 struct Wordler {
@@ -29,6 +29,18 @@ impl Word {
         Word { letters }
     }
 
+    fn next(&self, input: &str) -> Self {
+        let Word { mut letters } = Word::new(input);
+        for (i, letter) in letters.iter_mut().enumerate() {
+            let letter_in_prev_word = self.letters[i];
+            match letter_in_prev_word {
+                Filter::Green { .. } => *letter = letter_in_prev_word,
+                _ => (),
+            }
+        }
+        Word { letters }
+    }
+
     fn enumerate(&mut self) -> impl Iterator<Item=(usize, &mut Filter)> {
         self.letters.iter_mut().enumerate()
     }
@@ -45,7 +57,7 @@ fn filter_color(filter: &Filter) -> egui::Color32 {
 impl epi::App for Wordler {
     fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical(|ui| {
+            ui.vertical_centered_justified(|ui| {
                 let num_attempts = self.attempts.len();
                 let mut next_word = false;
                 for (row, word) in self.attempts.iter_mut().enumerate() {
@@ -66,12 +78,14 @@ impl epi::App for Wordler {
                     }));
                 }
                 if next_word {
-                    self.game.add_filters(self.attempts.last().unwrap().letters.clone());
+                    let last_word = self.attempts.last().unwrap();
+                    self.game.add_filters(last_word.letters.clone());
                     match self.game.suggest_word() {
-                        Some(word) => self.attempts.push(Word::new(word)),
+                        Some(word) => self.attempts.push(last_word.next(word)),
                         _ => (),
                     }
                 }
+                ui.separator();
                 if ui.button("Reset").clicked() {
                     let new_wordler = Wordler::default();
                     *self = new_wordler;
