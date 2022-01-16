@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 wordler-core = { path = "../core" }
+eframe = "0.16"

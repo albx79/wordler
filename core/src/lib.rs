@@ -5,7 +5,7 @@ pub mod frequency;
 pub mod words;
 
 /// The possible colours of a cell
-#[derive(Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Clone, Copy)]
 pub enum Filter {
     /// This letter is present, but not at this position
     Yellow { letter: u8, position: usize },
@@ -19,9 +19,9 @@ impl Debug for Filter {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use Filter::*;
         match self {
-            Green { letter, position } => write!(f, "Green({}, {})", *letter as char, position),
-            Yellow { letter, position } => write!(f, "Yellow({}, {})", *letter as char, position),
-            Grey(letter) => write!(f, "Grey({})", *letter as char),
+            Green { position, .. } => write!(f, "Green({}, {})", self.letter(), position),
+            Yellow { position, .. } => write!(f, "Yellow({}, {})", self.letter(), position),
+            Grey(_) => write!(f, "Grey({})", self.letter()),
         }
     }
 }
@@ -34,6 +34,23 @@ impl Filter {
             Green { letter, position } => input[*position] == *letter,
             Yellow { letter, position } => input[*position] != *letter && input.contains(letter),
             Grey(letter) => !input.contains(letter),
+        }
+    }
+
+    pub fn letter(&self) -> char {
+        use Filter::*;
+        *match self {
+            Grey(letter) => letter,
+            Yellow { letter, .. } => letter,
+            Green { letter, .. } => letter
+        } as char
+    }
+
+    pub fn cycle(&self, position: usize) -> Filter {
+        match *self {
+            Filter::Grey(letter) => Filter::Yellow { position, letter },
+            Filter::Yellow { letter, .. } => Filter::Green { position, letter },
+            Filter::Green { letter, .. } => Filter::Grey(letter),
         }
     }
 }
