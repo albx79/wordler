@@ -54,20 +54,25 @@ fn filter_color(filter: &Filter) -> egui::Color32 {
     }
 }
 
+fn wordler_button(c: char) -> egui::Button {
+    egui::Button::new(RichText::new(String::from(c))
+        .color(egui::Color32::WHITE)
+        .monospace()
+        .heading())
+}
+
 impl epi::App for Wordler {
     fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical_centered_justified(|ui| {
+            egui::Grid::new("main grid")
+                .show(ui, |ui| {
                 let num_attempts = self.attempts.len();
                 let mut next_word = false;
                 for (row, word) in self.attempts.iter_mut().enumerate() {
-                    ui.add_enabled_ui(row == num_attempts - 1, |ui| ui.horizontal(|ui| {
+                    let is_last_row = row == num_attempts - 1;
+                    ui.add_enabled_ui(is_last_row, |ui| ui.horizontal(|ui| {
                         for (position, filter) in word.enumerate() {
-                            let button = egui::Button::new(RichText::new(String::from(filter.letter()))
-                                .color(egui::Color32::WHITE)
-                                .monospace()
-                                .heading())
-                                .fill(filter_color(filter));
+                            let button = wordler_button(filter.letter()).fill(filter_color(filter));
                             if ui.add(button).clicked() {
                                 *filter = filter.cycle(position);
                             }
@@ -76,6 +81,7 @@ impl epi::App for Wordler {
                             next_word = true;
                         }
                     }));
+                    ui.end_row();
                 }
                 if next_word {
                     let last_word = self.attempts.last().unwrap();
@@ -86,10 +92,12 @@ impl epi::App for Wordler {
                     }
                 }
                 ui.separator();
+                ui.end_row();
                 if ui.button("Reset").clicked() {
                     let new_wordler = Wordler::default();
                     *self = new_wordler;
                 }
+                ui.end_row();
             });
         });
 
