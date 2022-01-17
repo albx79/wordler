@@ -87,7 +87,10 @@ impl epi::App for Wordler {
                     let last_word = self.attempts.last().unwrap();
                     self.game.add_filters(last_word.letters.clone());
                     match self.game.suggest_word() {
-                        Some(word) => self.attempts.push(last_word.next(word)),
+                        Some(word) => {
+                            let next_word = last_word.next(word);
+                            self.attempts.push(next_word);
+                        },
                         _ => (),
                     }
                 }
