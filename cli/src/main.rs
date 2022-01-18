@@ -75,4 +75,22 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn guess_the_word_PROXY() {
+        let mut game = Game::default();
+
+        for (resp, word) in [
+            ("..g..", "ATONE"),
+            ("..g.y", "CHOIR"),
+            ("..gy.", "SWORD"),
+            (".gg.y", "GROUP"),
+            ("ggg..", "PROMO"),
+        ] {
+            game.add_filters(str_to_filter(resp, word).unwrap());
+        }
+
+        assert_eq!(game.suggest_word(), Some("PROXY"));
+    }
 }

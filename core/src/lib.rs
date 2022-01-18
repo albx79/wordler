@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use std::collections::BTreeSet;
+use crate::frequency::{score_mul_unique, score_sum_unique};
 
 pub mod frequency;
 pub mod words;
@@ -58,6 +59,7 @@ impl Filter {
 pub struct Game {
     words: BTreeSet<&'static str>,
     filters: BTreeSet<Filter>,
+    score: Box<dyn Fn(&str) -> f64 >
 }
 
 impl Default for Game {
@@ -65,6 +67,7 @@ impl Default for Game {
         Game {
             words: words::all().filter(|w| w.len() == 5).collect(),
             filters: BTreeSet::new(),
+            score: Box::new(score_sum_unique)
         }
     }
 }
@@ -73,15 +76,29 @@ impl Game {
     pub fn suggest_word(&self) -> Option<&str> {
         self.words.iter()
             .filter(|word| self.filters.iter().all(|filter| filter.accept(word)))
-            .map(|word| (word, frequency::score_sum_unique(word)))
-            .max_by(|(_, score1), (_, score2)| score1.partial_cmp(score2).unwrap())
+            .map(|word| (word, (*self.score)(word)))
+            .max_by_key(|(_, score)| (score * 1000.0) as u64)
             .map(|(word, _)| *word)
     }
 
     pub fn add_filters(&mut self, filters: impl IntoIterator<Item=Filter>) {
-        filters.into_iter().for_each(|filter| {
+        let new_filters = filters.into_iter()
+            .filter(|filter| self.is_compatible(&filter))
+            .collect::<Vec<_>>();
+        new_filters.into_iter().for_each(|filter| {
             self.filters.insert(filter);
         });
+    }
+
+    fn is_compatible(&self, new_filter: &Filter) -> bool {
+        self.filters.iter().all(|current_filter|{
+            match (current_filter, new_filter) {
+                (Filter::Green {letter: letter1, ..}, Filter::Grey(letter2)) |
+                (Filter::Yellow {letter: letter1, ..}, Filter::Grey(letter2))
+                    if letter1 == letter2 => false,
+                 _ => true,
+            }
+        })
     }
 }
 
