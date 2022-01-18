@@ -1,20 +1,30 @@
-use wordler_core::{Filter, Game};
+use wordler_core::{Filter, Game, Scoring};
 use eframe::{egui, epi};
 use eframe::egui::{CtxRef, RichText, Ui};
 use eframe::epi::Frame;
+use wordler_core::frequency::{score_sum_unique, score_mul_unique};
 
 struct Wordler {
     attempts: Vec<Word>,
-    game: Game,
+    game: Game<'static>,
+    scoring_functions: Vec<Scoring<'static>>,
+    scoring_idx: usize,
 }
 
 impl Default for Wordler {
     fn default() -> Self {
         let game = Game::default();
         let first_word = game.suggest_word().unwrap();
+        let sum_freqs = Scoring::default();
+        let mul_freqs = Scoring {
+            name: "Multiply freq'cies of unique letters".to_string(),
+            func: &score_mul_unique,
+        };
         Wordler {
             attempts: vec![Word::new(first_word)],
             game,
+            scoring_functions: vec![sum_freqs, mul_freqs],
+            scoring_idx: 0,
         }
     }
 }
@@ -39,6 +49,11 @@ impl Wordler {
             }
             _ => (),
         }
+    }
+
+    fn reset(&mut self) {
+        self.game = Game::with_scoring(self.scoring_functions[self.scoring_idx].clone());
+        self.attempts = vec![self.game.suggest_word().map(Word::new).unwrap()];
     }
 }
 
@@ -77,7 +92,7 @@ impl Word {
                 .heading()
             )
                 .fill(filter_color(filter));
-            if ui.add(button).clicked() {
+            if ui.add_sized([24.0, 24.0], button).clicked() {
                 *filter = filter.cycle(position);
             }
         }
@@ -95,36 +110,44 @@ fn filter_color(filter: &Filter) -> egui::Color32 {
 impl epi::App for Wordler {
     fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::Grid::new("main grid")
-                .min_col_width(14.0)
-                .max_col_width(14.0)
-                .show(ui, |ui| {
-                    let num_attempts = self.attempts.len();
-                    let mut next_word = false;
-                    let mut undo_word = false;
-                    for (row, word) in self.attempts.iter_mut().enumerate() {
-                        let is_last_row = row == num_attempts - 1;
-                        ui.add_enabled_ui(is_last_row, |ui| {
-                            word.ui(ui);
-                            next_word = ui.button("Next").clicked();
-                            undo_word = is_last_row && row != 0 && ui.button("Undo").clicked();
-                        });
-                        ui.end_row();
-                    }
-                    if next_word {
-                        self.next();
-                    } else if undo_word {
-                        self.undo();
-                    }
-
-                    ui.separator();
-                    ui.end_row();
-                    if ui.button("Reset").clicked() {
-                        let new_wordler = Wordler::default();
-                        *self = new_wordler;
-                    }
-                    ui.end_row();
+            ui.vertical(|ui|{
+                ui.add_enabled_ui(self.attempts.len() == 1, |ui| {
+                    let update_scoring_fn = egui::ComboBox::from_label("Scoring function")
+                        .selected_text(&self.scoring_functions[self.scoring_idx].name)
+                        .show_index(ui, &mut self.scoring_idx, self.scoring_functions.len(), |i| {
+                            self.scoring_functions[i].name.clone()
+                        }).changed();
+                    if update_scoring_fn {
+                        self.reset();
+                    };
                 });
+                ui.separator();
+
+                egui::Grid::new("main grid")
+                    .show(ui, |ui| {
+                        let num_attempts = self.attempts.len();
+                        let mut next_word = false;
+                        let mut undo_word = false;
+                        for (row, word) in self.attempts.iter_mut().enumerate() {
+                            let is_last_row = row == num_attempts - 1;
+                            ui.add_enabled_ui(is_last_row, |ui| {
+                                word.ui(ui);
+                                next_word = ui.button("Next").clicked();
+                                undo_word = is_last_row && row != 0 && ui.button("Undo").clicked();
+                            });
+                            ui.end_row();
+                        }
+                        if next_word {
+                            self.next();
+                        } else if undo_word {
+                            self.undo();
+                        }
+                    });
+                ui.separator();
+                if ui.button("Reset").clicked() {
+                    self.reset();
+                }
+            });
         });
 
         frame.set_window_size(ctx.used_size());

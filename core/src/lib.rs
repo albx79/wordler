@@ -56,27 +56,59 @@ impl Filter {
     }
 }
 
-pub struct Game {
-    words: BTreeSet<&'static str>,
-    filters: BTreeSet<Filter>,
-    score: Box<dyn Fn(&str) -> f64 >
+#[derive(Clone)]
+pub struct Scoring<'a> {
+    pub name: String,
+    pub func: &'a dyn Fn(&str) -> f64,
 }
 
-impl Default for Game {
+impl Default for Scoring<'_> {
     fn default() -> Self {
-        Game {
-            words: words::all().filter(|w| w.len() == 5).collect(),
-            filters: BTreeSet::new(),
-            score: Box::new(score_sum_unique)
+        Scoring {
+            name: "Sum freq'cies of unique letters".to_string(),
+            func: &score_sum_unique
         }
     }
 }
 
-impl Game {
+impl PartialEq<Self> for Scoring<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Scoring<'_> {}
+
+pub struct Game<'a> {
+    pub words: BTreeSet<&'static str>,
+    pub filters: BTreeSet<Filter>,
+    pub score: Scoring<'a>,
+}
+
+impl Default for Game<'_> {
+    fn default() -> Self {
+        Game {
+            words: words::all().filter(|w| w.len() == 5).collect(),
+            filters: BTreeSet::new(),
+            score: Scoring::default(),
+        }
+    }
+}
+
+impl<'a> Game<'a> {
+    pub fn with_scoring(s: Scoring<'a>) -> Self {
+        Game {
+            score: s,
+            ..Default::default()
+        }
+    }
+}
+
+impl Game<'_> {
     pub fn suggest_word(&self) -> Option<&str> {
         self.words.iter()
             .filter(|word| self.filters.iter().all(|filter| filter.accept(word)))
-            .map(|word| (word, (*self.score)(word)))
+            .map(|word| (word, (*self.score.func)(word)))
             .max_by_key(|(_, score)| (score * 1000.0) as u64)
             .map(|(word, _)| *word)
     }
