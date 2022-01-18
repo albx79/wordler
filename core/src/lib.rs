@@ -73,7 +73,7 @@ impl Game {
     pub fn suggest_word(&self) -> Option<&str> {
         self.words.iter()
             .filter(|word| self.filters.iter().all(|filter| filter.accept(word)))
-            .map(|word| (word, frequency::score(word)))
+            .map(|word| (word, frequency::score_sum_unique(word)))
             .max_by(|(_, score1), (_, score2)| score1.partial_cmp(score2).unwrap())
             .map(|(word, _)| *word)
     }

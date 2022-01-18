@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 static FREQUENCIES: [(char, f64); 26] = [
     ('A', 8.34),
     ('B', 1.54),
@@ -31,10 +33,27 @@ fn of(letter: char) -> f64 {
     FREQUENCIES.iter().find(|x| x.0 == letter).unwrap().1
 }
 
-pub fn score(word: &str) -> f64 {
-    use itertools::Itertools;
+pub fn score_sum_unique(word: &str) -> f64 {
     word.chars()
         .unique()
         .map(of)
-        .fold(0.0, |a, b| a + b)
+        .sum()
+}
+
+pub fn score_mul_unique(word: &str) -> f64 {
+    word.chars()
+        .unique()
+        .map(of)
+        .map(|freq| freq / 100.0 + 1.0)
+        .fold(1.0, |a, b| a * b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_score() {
+        assert_eq!(score_sum_unique("PROXY"), 17.279999999999998);
+        assert_eq!(score_mul_unique("PROXY"), 1.1830327972165195);
+    }
 }
