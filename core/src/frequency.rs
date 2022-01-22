@@ -1,59 +1,112 @@
 use itertools::Itertools;
+use std::collections::btree_map::BTreeMap;
+use crate::Score;
 
-static FREQUENCIES: [(char, f64); 26] = [
-    ('A', 8.34),
-    ('B', 1.54),
-    ('C', 2.73),
-    ('D', 4.14),
-    ('E', 12.60),
-    ('F', 2.03),
-    ('G', 1.92),
-    ('H', 6.11),
-    ('I', 6.71),
-    ('J', 0.23),
-    ('K', 0.87),
-    ('L', 4.24),
-    ('M', 2.53),
-    ('N', 6.80),
-    ('O', 7.70),
-    ('P', 1.66),
-    ('Q', 0.09),
-    ('R', 5.68),
-    ('S', 6.11),
-    ('T', 9.37),
-    ('U', 2.85),
-    ('V', 1.06),
-    ('W', 2.34),
-    ('X', 0.20),
-    ('Y', 2.04),
-    ('Z', 0.06),
-];
+static ENGLISH_WORDS: &str = include_str!("words.txt");
 
-fn of(letter: char) -> f64 {
-    FREQUENCIES.iter().find(|x| x.0 == letter).unwrap().1
+pub fn english_words() -> Vec<String> {
+    ENGLISH_WORDS.split('\n').map(|s| s.to_owned()).collect()
 }
 
-pub fn score_sum_unique(word: &str) -> f64 {
-    word.chars()
-        .unique()
-        .map(of)
-        .sum()
+pub type FreqTable = BTreeMap<u8, f64>;
+
+#[derive(Clone)]
+pub struct SumUnique(pub FreqTable);
+
+#[derive(Clone)]
+pub struct MulUnique(pub FreqTable);
+
+impl Score for SumUnique {
+    fn name(&self) -> &str {
+        "Sum freq'cies of unique letters"
+    }
+
+    fn score(&self, word: &str) -> f64 {
+        word.bytes()
+            .unique()
+            .map(|c| self.0[&c])
+            .sum()
+    }
+
+    fn duplicate(&self) -> Box<dyn Score> {
+        Box::new(self.clone())
+    }
 }
 
-pub fn score_mul_unique(word: &str) -> f64 {
-    word.chars()
-        .unique()
-        .map(of)
-        .map(|freq| freq / 100.0 + 1.0)
-        .fold(1.0, |a, b| a * b)
+impl Score for MulUnique {
+    fn name(&self) -> &str {
+        "Multiply freq'cies of unique letters"
+    }
+
+    fn score(&self, word: &str) -> f64 {
+        word.bytes()
+            .unique()
+            .map(|c| self.0[&c])
+            .map(|freq| freq / 100.0 + 1.0)
+            .fold(1.0, |a, b| a * b)
+    }
+
+    fn duplicate(&self) -> Box<dyn Score> {
+        Box::new(self.clone())
+    }
+}
+
+pub fn frequencies<'a>(words: impl Iterator<Item=&'a str>) -> BTreeMap<u8, f64> {
+    let mut count: BTreeMap<u8, u32> = BTreeMap::new();
+    let mut total = 0f64;
+    for letter in words.flat_map(|w| w.bytes()) {
+        *count.entry(letter).or_insert(0) += 1;
+        total += 1.0;
+    }
+    count.iter()
+        .map(|(&letter, &occurrencies)| (letter, occurrencies as f64 / total * 100.0))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    macro_rules! dict {
+        () => {
+            {
+                BTreeMap::new()
+            }
+        };
+        ( $( $key:expr => $val:expr),* ) => {
+            {
+                let mut temp_set = BTreeMap::new();
+                $(
+                    temp_set.insert($key, $val); // Insert each item matched into the HashSet
+                )*
+                temp_set // Return the populated HashSet
+            }
+        };
+    }
+
+    #[test]
+    fn test_frequencies() {
+        assert_eq!(
+            frequencies(["AA", "BB"].into_iter()),
+            dict!(b'A' => 50.0, b'B' => 50.0)
+        );
+
+        assert_eq!(
+            frequencies(["A", "BBB"].into_iter()),
+            dict!(b'A' => 25.0, b'B' => 75.0)
+        );
+    }
+
     #[test]
     fn test_score() {
-        assert_eq!(score_sum_unique("PROXY"), 17.279999999999998);
-        assert_eq!(score_mul_unique("PROXY"), 1.1830327972165195);
+        let freq_table = frequencies(english_words().iter().map(|s| s.as_str()));
+
+        let sum_unique = SumUnique(freq_table.clone());
+        assert!(sum_unique.score("PROXY") > 10.0);
+        assert!(sum_unique.score("SINCE") > sum_unique.score("WINCE"));
+
+        let mul_unique = MulUnique(freq_table.clone());
+        assert!(mul_unique.score("PROXY") > 1.0);
+        assert!(mul_unique.score("SINCE") > mul_unique.score("WINCE"));
     }
 }

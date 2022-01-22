@@ -1,13 +1,13 @@
-use wordler_core::{Filter, Game, Scoring};
+use wordler_core::{Filter, Game, Score};
 use eframe::{egui, epi};
 use eframe::egui::{CtxRef, RichText, Ui};
 use eframe::epi::Frame;
-use wordler_core::frequency::{score_sum_unique, score_mul_unique};
+use wordler_core::frequency::{MulUnique, SumUnique};
 
 struct Wordler {
     attempts: Vec<Word>,
-    game: Game<'static>,
-    scoring_functions: Vec<Scoring<'static>>,
+    game: Game,
+    scoring_functions: Vec<Box<dyn Score>>,
     scoring_idx: usize,
 }
 
@@ -15,15 +15,12 @@ impl Default for Wordler {
     fn default() -> Self {
         let game = Game::default();
         let first_word = game.suggest_word().unwrap();
-        let sum_freqs = Scoring::default();
-        let mul_freqs = Scoring {
-            name: "Multiply freq'cies of unique letters".to_string(),
-            func: &score_mul_unique,
-        };
+        let sum_freqs = SumUnique(game.frequencies.clone());
+        let mul_freqs = MulUnique(game.frequencies.clone());
         Wordler {
             attempts: vec![Word::new(first_word)],
             game,
-            scoring_functions: vec![sum_freqs, mul_freqs],
+            scoring_functions: vec![Box::new(sum_freqs), Box::new(mul_freqs)],
             scoring_idx: 0,
         }
     }
@@ -52,7 +49,7 @@ impl Wordler {
     }
 
     fn reset(&mut self) {
-        self.game = Game::with_scoring(self.scoring_functions[self.scoring_idx].clone());
+        self.game = Game::with_scoring(self.scoring_functions[self.scoring_idx].duplicate());
         self.attempts = vec![self.game.suggest_word().map(Word::new).unwrap()];
     }
 }
@@ -113,9 +110,9 @@ impl epi::App for Wordler {
             ui.vertical(|ui|{
                 ui.add_enabled_ui(self.attempts.len() == 1, |ui| {
                     let update_scoring_fn = egui::ComboBox::from_label("Scoring function")
-                        .selected_text(&self.scoring_functions[self.scoring_idx].name)
+                        .selected_text(self.scoring_functions[self.scoring_idx].name())
                         .show_index(ui, &mut self.scoring_idx, self.scoring_functions.len(), |i| {
-                            self.scoring_functions[i].name.clone()
+                            self.scoring_functions[i].name().to_string()
                         }).changed();
                     if update_scoring_fn {
                         self.reset();

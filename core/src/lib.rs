@@ -1,9 +1,8 @@
 use std::fmt::{Debug, Formatter};
 use std::collections::BTreeSet;
-use crate::frequency::{score_mul_unique, score_sum_unique};
+use crate::frequency::SumUnique;
 
 pub mod frequency;
-pub mod words;
 
 /// The possible colours of a cell
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Clone, Copy)]
@@ -56,61 +55,48 @@ impl Filter {
     }
 }
 
-#[derive(Clone)]
-pub struct Scoring<'a> {
-    pub name: String,
-    pub func: &'a dyn Fn(&str) -> f64,
+pub trait Score {
+    fn name(&self) -> &str;
+    fn score(&self, word: &str) -> f64;
+    fn duplicate(&self) -> Box<dyn Score>;
 }
 
-impl Default for Scoring<'_> {
-    fn default() -> Self {
-        Scoring {
-            name: "Sum freq'cies of unique letters".to_string(),
-            func: &score_sum_unique
-        }
-    }
-}
-
-impl PartialEq<Self> for Scoring<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl Eq for Scoring<'_> {}
-
-pub struct Game<'a> {
-    pub words: BTreeSet<&'static str>,
+pub struct Game {
     pub filters: BTreeSet<Filter>,
-    pub score: Scoring<'a>,
+    pub score: Box<dyn Score>,
+    pub words: Vec<String>,
+    pub frequencies: frequency::FreqTable,
 }
 
-impl Default for Game<'_> {
+impl Default for Game {
     fn default() -> Self {
+        let words = frequency::english_words();
+        let frequencies = frequency::frequencies(words.iter().map(|s| s.as_str()));
         Game {
-            words: words::all().filter(|w| w.len() == 5).collect(),
             filters: BTreeSet::new(),
-            score: Scoring::default(),
+            score: Box::new(SumUnique(frequencies.clone())),
+            words,
+            frequencies
         }
     }
 }
 
-impl<'a> Game<'a> {
-    pub fn with_scoring(s: Scoring<'a>) -> Self {
+impl<'a> Game {
+    pub fn with_scoring(score: Box<dyn Score>) -> Self {
         Game {
-            score: s,
+            score,
             ..Default::default()
         }
     }
 }
 
-impl Game<'_> {
+impl Game {
     pub fn suggest_word(&self) -> Option<&str> {
         self.words.iter()
             .filter(|word| self.filters.iter().all(|filter| filter.accept(word)))
-            .map(|word| (word, (*self.score.func)(word)))
+            .map(|word| (word, self.score.score(word)))
             .max_by_key(|(_, score)| (score * 1000.0) as u64)
-            .map(|(word, _)| *word)
+            .map(|(word, _)| word.as_str())
     }
 
     pub fn add_filters(&mut self, filters: impl IntoIterator<Item=Filter>) {
@@ -164,6 +150,7 @@ mod tests {
         ]);
 
         let word = game.suggest_word().unwrap();
-        assert_eq!(word, "ROANS");
+        assert!(word.contains("A"));
+        assert!(word.contains("O"));
     }
 }
