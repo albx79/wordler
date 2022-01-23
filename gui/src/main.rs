@@ -1,148 +1,73 @@
-use wordler_core::{Filter, Game, Score};
+use wordler_core::{Cell, Wordler, Word};
 use eframe::{egui, epi};
 use eframe::egui::{CtxRef, RichText, Ui};
 use eframe::epi::Frame;
-use wordler_core::frequency::{MulUnique, SumUnique};
 
-struct Wordler {
-    attempts: Vec<Word>,
-    game: Game,
-    scoring_functions: Vec<Box<dyn Score>>,
-    scoring_idx: usize,
-}
+struct Gui(Wordler);
 
-impl Default for Wordler {
-    fn default() -> Self {
-        let game = Game::default();
-        let first_word = game.suggest_word().unwrap();
-        let sum_freqs = SumUnique(game.frequencies.clone());
-        let mul_freqs = MulUnique(game.frequencies.clone());
-        Wordler {
-            attempts: vec![Word::new(first_word)],
-            game,
-            scoring_functions: vec![Box::new(sum_freqs), Box::new(mul_freqs)],
-            scoring_idx: 0,
+fn word_ui(word: &mut Word, ui: &mut Ui) {
+    for (position, filter) in word.enumerate() {
+        let button = egui::Button::new(RichText::new(
+            String::from(filter.letter()))
+            .color(egui::Color32::WHITE)
+            .monospace()
+            .heading()
+        )
+            .fill(filter_color(filter));
+        if ui.add_sized([24.0, 24.0], button).clicked() {
+            *filter = filter.cycle(position);
         }
     }
 }
 
-impl Wordler {
-    fn undo(&mut self) {
-        if self.attempts.len() < 2 {
-            return;
-        }
-        self.attempts.remove(self.attempts.len() - 1);
-        self.game = Game::default();
-        self.attempts.iter().for_each(|word| self.game.add_filters(word.letters.clone()))
-    }
-
-    fn next(&mut self) {
-        let last_word = self.attempts.last().unwrap();
-        self.game.add_filters(last_word.letters.clone());
-        match self.game.suggest_word() {
-            Some(word) => {
-                let next_word = last_word.next(word);
-                self.attempts.push(next_word);
-            }
-            _ => (),
-        }
-    }
-
-    fn reset(&mut self) {
-        self.game = Game::with_scoring(self.scoring_functions[self.scoring_idx].duplicate());
-        self.attempts = vec![self.game.suggest_word().map(Word::new).unwrap()];
-    }
-}
-
-struct Word {
-    letters: Vec<Filter>,
-}
-
-impl Word {
-    fn new(input: &str) -> Self {
-        let letters = input.bytes().map(|b| Filter::Grey(b)).collect();
-        Word { letters }
-    }
-
-    fn next(&self, input: &str) -> Self {
-        let mut letters = Word::new(input);
-        for (i, letter) in letters.enumerate() {
-            let letter_in_prev_word = self.letters[i];
-            match letter_in_prev_word {
-                Filter::Green { .. } => *letter = letter_in_prev_word,
-                _ => (),
-            }
-        }
-        letters
-    }
-
-    fn enumerate(&mut self) -> impl Iterator<Item=(usize, &mut Filter)> {
-        self.letters.iter_mut().enumerate()
-    }
-
-    fn ui(&mut self, ui: &mut Ui) {
-        for (position, filter) in self.letters.iter_mut().enumerate() {
-            let button = egui::Button::new(RichText::new(
-                String::from(filter.letter()))
-                .color(egui::Color32::WHITE)
-                .monospace()
-                .heading()
-            )
-                .fill(filter_color(filter));
-            if ui.add_sized([24.0, 24.0], button).clicked() {
-                *filter = filter.cycle(position);
-            }
-        }
-    }
-}
-
-fn filter_color(filter: &Filter) -> egui::Color32 {
+fn filter_color(filter: &Cell) -> egui::Color32 {
     match filter {
-        Filter::Yellow { .. } => egui::Color32::from_rgb(0xc9, 0xb4, 0x58),
-        Filter::Green { .. } => egui::Color32::from_rgb(0x6a, 0xaa, 0x64),
-        Filter::Grey(_) => egui::Color32::from_rgb(0x78, 0x7c, 0x7e),
+        Cell::Yellow { .. } => egui::Color32::from_rgb(0xc9, 0xb4, 0x58),
+        Cell::Green { .. } => egui::Color32::from_rgb(0x6a, 0xaa, 0x64),
+        Cell::Grey(_) => egui::Color32::from_rgb(0x78, 0x7c, 0x7e),
     }
 }
 
-impl epi::App for Wordler {
+impl epi::App for Gui {
     fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
+        let w = &mut self.0;
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
-                ui.add_enabled_ui(self.attempts.len() == 1, |ui| {
+                ui.add_enabled_ui(w.attempts.len() == 1, |ui| {
                     let update_scoring_fn = egui::ComboBox::from_label("Scoring function")
-                        .selected_text(self.scoring_functions[self.scoring_idx].name())
-                        .show_index(ui, &mut self.scoring_idx, self.scoring_functions.len(), |i| {
-                            self.scoring_functions[i].name().to_string()
+                        .selected_text(w.scoring_functions[w.scoring_idx].name())
+                        .show_index(ui, &mut w.scoring_idx, w.scoring_functions.len(), |i| {
+                            w.scoring_functions[i].name().to_string()
                         }).changed();
                     if update_scoring_fn {
-                        self.reset();
+                        w.reset();
                     };
                 });
                 ui.separator();
 
                 egui::Grid::new("main grid")
                     .show(ui, |ui| {
-                        let num_attempts = self.attempts.len();
+                        let num_attempts = w.attempts.len();
                         let mut next_word = false;
                         let mut undo_word = false;
-                        for (row, word) in self.attempts.iter_mut().enumerate() {
+                        for (row, word) in w.attempts.iter_mut().enumerate() {
                             let is_last_row = row == num_attempts - 1;
                             ui.add_enabled_ui(is_last_row, |ui| {
-                                word.ui(ui);
+                                word_ui(word, ui);
                                 next_word = ui.button("Next").clicked();
                                 undo_word = is_last_row && row != 0 && ui.button("Undo").clicked();
                             });
                             ui.end_row();
                         }
                         if next_word {
-                            self.next();
+                            w.next();
                         } else if undo_word {
-                            self.undo();
+                            w.undo();
                         }
                     });
                 ui.separator();
                 if ui.button("Reset").clicked() {
-                    self.reset();
+                    w.reset();
                 }
             });
         });
@@ -158,5 +83,5 @@ impl epi::App for Wordler {
 
 fn main() {
     let options = eframe::NativeOptions::default();
-    eframe::run_native(Box::new(Wordler::default()), options);
+    eframe::run_native(Box::new(Gui(Wordler::default())), options);
 }

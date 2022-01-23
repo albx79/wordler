@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 wordler-core = { path = "../core" }
 promptly = "0.3"
+colored = "2.0"

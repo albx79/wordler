@@ -1,12 +1,145 @@
 use std::fmt::{Debug, Formatter};
-use std::collections::BTreeSet;
-use crate::frequency::SumUnique;
+use crate::frequency::{SumUnique, MulUnique};
+use std::collections::btree_set::BTreeSet;
+use itertools::Itertools;
 
 pub mod frequency;
 
-/// The possible colours of a cell
+pub struct Wordler {
+    pub attempts: Vec<Word>,
+    pub filters: BTreeSet<Cell>,
+    pub words: Vec<String>,
+    pub frequencies: frequency::FreqTable,
+    pub scoring_functions: Vec<Box<dyn Score>>,
+    pub scoring_idx: usize,
+}
+
+impl Default for Wordler {
+    fn default() -> Self {
+        let words = frequency::english_words();
+        let frequencies = frequency::frequencies(words.iter().map(|s| s.as_str()));
+        let scoring_functions: Vec<Box<dyn Score>> = vec![
+            Box::new(SumUnique(frequencies.clone())),
+            Box::new(MulUnique(frequencies.clone())),
+        ];
+        let first_word = suggest_word(&words, &BTreeSet::new(), scoring_functions[0].as_ref())
+            .map(Word::new)
+            .unwrap();
+        Wordler {
+            words,
+            frequencies,
+            scoring_functions,
+            attempts: vec![first_word],
+            filters: BTreeSet::new(),
+            scoring_idx: 0,
+        }
+    }
+}
+
+fn suggest_word<'a, 'b>(words: &'a[String], filters: &BTreeSet<Cell>, score: &dyn Score) -> Option<&'a str> {
+    words.iter()
+        .filter(|word| filters.iter().all(|filter| filter.accept(word)))
+        .map(|word| (word, score.score(word)))
+        .max_by_key(|(_, score)| (score * 1000.0) as u64)
+        .map(|(word, _)| word.as_str())
+}
+
+
+impl Wordler {
+
+    pub fn add_filters(&mut self, filters: impl IntoIterator<Item=Cell>) {
+        let new_filters = filters.into_iter()
+            .filter(|filter| self.is_compatible(&filter))
+            .collect::<Vec<_>>();
+        new_filters.into_iter().for_each(|filter| {
+            self.filters.insert(filter);
+        });
+    }
+
+    fn is_compatible(&self, new_filter: &Cell) -> bool {
+        self.filters.iter().all(|current_filter|{
+            match (current_filter, new_filter) {
+                (Cell::Green {letter: letter1, ..}, Cell::Grey(letter2)) |
+                (Cell::Yellow {letter: letter1, ..}, Cell::Grey(letter2))
+                if letter1 == letter2 => false,
+                _ => true,
+            }
+        })
+    }
+
+    pub fn undo(&mut self) {
+        if self.attempts.len() < 2 {
+            return;
+        }
+        self.attempts.remove(self.attempts.len() - 1);
+        self.filters = BTreeSet::new();
+        let old_attempts = std::mem::take(&mut self.attempts);
+        old_attempts.iter().for_each(|word| self.add_filters(word.0.clone()));
+        self.attempts = old_attempts;
+    }
+
+    pub fn next(&mut self) {
+        let last_word = self.attempts.last().unwrap().clone();
+        self.add_filters(last_word.0.clone());
+        match self.suggest_word() {
+            Some(word)  => {
+                let next_word = last_word.next(word);
+                self.attempts.push(next_word);
+            }
+            _ => (),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.attempts = vec![];
+        self.filters = BTreeSet::new();
+        self.attempts.push(Word::new(self.suggest_word().unwrap()));
+    }
+
+    pub fn suggest_word(&self) -> Option<&str> {
+        suggest_word(&self.words, &self.filters, self.score())
+    }
+
+    fn score(&self) -> &dyn Score {
+        self.scoring_functions[self.scoring_idx].as_ref()
+    }
+}
+
+#[derive(Clone)]
+pub struct Word(pub Vec<Cell>);
+
+impl std::string::ToString for Word {
+    fn to_string(&self) -> String {
+        self.0.iter().map(|c| c.letter()).join("")
+    }
+}
+
+impl Word {
+    pub fn new(input: &str) -> Self {
+        let letters = input.bytes().map(|b| Cell::Grey(b)).collect();
+        Word(letters)
+    }
+
+    pub fn next(&self, input: &str) -> Self {
+        let mut letters = Word::new(input);
+        for (i, letter) in letters.enumerate() {
+            let letter_in_prev_word = self.0[i];
+            match letter_in_prev_word {
+                Cell::Green { .. } => *letter = letter_in_prev_word,
+                _ => (),
+            }
+        }
+        letters
+    }
+
+    pub fn enumerate(&mut self) -> impl Iterator<Item=(usize, &mut Cell)> {
+        self.0.iter_mut().enumerate()
+    }
+}
+
+/// The possible states of a cell
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Clone, Copy)]
-pub enum Filter {
+pub enum Cell {
     /// This letter is present, but not at this position
     Yellow { letter: u8, position: usize },
     /// This letter is present at this position
@@ -15,9 +148,9 @@ pub enum Filter {
     Grey(u8),
 }
 
-impl Debug for Filter {
+impl Debug for Cell {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use Filter::*;
+        use Cell::*;
         match self {
             Green { position, .. } => write!(f, "Green({}, {})", self.letter(), position),
             Yellow { position, .. } => write!(f, "Yellow({}, {})", self.letter(), position),
@@ -26,9 +159,9 @@ impl Debug for Filter {
     }
 }
 
-impl Filter {
+impl Cell {
     pub fn accept(&self, input: &str) -> bool {
-        use Filter::*;
+        use Cell::*;
         let input = input.as_bytes();
         match self {
             Green { letter, position } => input[*position] == *letter,
@@ -38,7 +171,7 @@ impl Filter {
     }
 
     pub fn letter(&self) -> char {
-        use Filter::*;
+        use Cell::*;
         *match self {
             Grey(letter) => letter,
             Yellow { letter, .. } => letter,
@@ -46,11 +179,11 @@ impl Filter {
         } as char
     }
 
-    pub fn cycle(&self, position: usize) -> Filter {
+    pub fn cycle(&self, position: usize) -> Cell {
         match *self {
-            Filter::Grey(letter) => Filter::Yellow { position, letter },
-            Filter::Yellow { letter, .. } => Filter::Green { position, letter },
-            Filter::Green { letter, .. } => Filter::Grey(letter),
+            Cell::Grey(letter) => Cell::Yellow { position, letter },
+            Cell::Yellow { letter, .. } => Cell::Green { position, letter },
+            Cell::Green { letter, .. } => Cell::Grey(letter),
         }
     }
 }
@@ -61,86 +194,27 @@ pub trait Score {
     fn duplicate(&self) -> Box<dyn Score>;
 }
 
-pub struct Game {
-    pub filters: BTreeSet<Filter>,
-    pub score: Box<dyn Score>,
-    pub words: Vec<String>,
-    pub frequencies: frequency::FreqTable,
-}
-
-impl Default for Game {
-    fn default() -> Self {
-        let words = frequency::english_words();
-        let frequencies = frequency::frequencies(words.iter().map(|s| s.as_str()));
-        Game {
-            filters: BTreeSet::new(),
-            score: Box::new(SumUnique(frequencies.clone())),
-            words,
-            frequencies
-        }
-    }
-}
-
-impl<'a> Game {
-    pub fn with_scoring(score: Box<dyn Score>) -> Self {
-        Game {
-            score,
-            ..Default::default()
-        }
-    }
-}
-
-impl Game {
-    pub fn suggest_word(&self) -> Option<&str> {
-        self.words.iter()
-            .filter(|word| self.filters.iter().all(|filter| filter.accept(word)))
-            .map(|word| (word, self.score.score(word)))
-            .max_by_key(|(_, score)| (score * 1000.0) as u64)
-            .map(|(word, _)| word.as_str())
-    }
-
-    pub fn add_filters(&mut self, filters: impl IntoIterator<Item=Filter>) {
-        let new_filters = filters.into_iter()
-            .filter(|filter| self.is_compatible(&filter))
-            .collect::<Vec<_>>();
-        new_filters.into_iter().for_each(|filter| {
-            self.filters.insert(filter);
-        });
-    }
-
-    fn is_compatible(&self, new_filter: &Filter) -> bool {
-        self.filters.iter().all(|current_filter|{
-            match (current_filter, new_filter) {
-                (Filter::Green {letter: letter1, ..}, Filter::Grey(letter2)) |
-                (Filter::Yellow {letter: letter1, ..}, Filter::Grey(letter2))
-                    if letter1 == letter2 => false,
-                 _ => true,
-            }
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_filter() {
-        assert!(!Filter::Grey(b'A').accept("BAB"));
-        assert!(Filter::Grey(b'A').accept("BBB"));
+        assert!(!Cell::Grey(b'A').accept("BAB"));
+        assert!(Cell::Grey(b'A').accept("BBB"));
 
-        assert!(Filter::Green { letter: b'A', position: 1 }.accept("BAB"));
-        assert!(!Filter::Green { letter: b'A', position: 0 }.accept("BAB"));
+        assert!(Cell::Green { letter: b'A', position: 1 }.accept("BAB"));
+        assert!(!Cell::Green { letter: b'A', position: 0 }.accept("BAB"));
 
-        assert!(Filter::Yellow { letter: b'A', position: 0 }.accept("BAB"));
-        assert!(!Filter::Yellow { letter: b'A', position: 1 }.accept("BAB"));
-        assert!(!Filter::Yellow { letter: b'A', position: 1 }.accept("BBB"));
+        assert!(Cell::Yellow { letter: b'A', position: 0 }.accept("BAB"));
+        assert!(!Cell::Yellow { letter: b'A', position: 1 }.accept("BAB"));
+        assert!(!Cell::Yellow { letter: b'A', position: 1 }.accept("BBB"));
     }
 
     #[test]
     fn test_game() {
-        let mut game = Game::default();
-        use Filter::*;
+        let mut game = Wordler::default();
+        use Cell::*;
 
         game.add_filters(vec![
             Yellow { letter: b'A', position: 0 },
