@@ -72,7 +72,6 @@ impl epi::App for Gui {
             });
         });
 
-        frame.set_window_size(ctx.used_size());
         frame.set_window_title("Wordler");
     }
 
@@ -82,6 +81,8 @@ impl epi::App for Gui {
 }
 
 fn main() {
-    let options = eframe::NativeOptions::default();
+    let mut options = eframe::NativeOptions::default();
+    options.resizable = false;
+    options.initial_window_size = Some([400.0, 350.0].into());
     eframe::run_native(Box::new(Gui(Wordler::default())), options);
 }
