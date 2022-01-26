@@ -7,4 +7,7 @@ edition = "2021"
 
 [dependencies]
 wordler-core = { path = "../core" }
-eframe = "0.16"
+eframe = "0.16" #{ version = "0.16.0", features = ["persistence"] }
+egui = { version = "0.16.1", features = ["serde", "serialize"] }
+serde = "1.0.133"
+serde_yaml = "0.8.23"

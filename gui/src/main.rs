@@ -1,7 +1,10 @@
+use std::time::Duration;
 use wordler_core::{Cell, Wordler, Word};
 use eframe::{egui, epi};
 use eframe::egui::{CtxRef, RichText, Ui};
 use eframe::epi::Frame;
+use egui::{Rgba, Style, Vec2};
+use crate::epi::Storage;
 
 struct Gui(Wordler);
 
@@ -29,6 +32,11 @@ fn filter_color(filter: &Cell) -> egui::Color32 {
 }
 
 impl epi::App for Gui {
+    fn setup(&mut self, ctx: &CtxRef, _frame: &Frame, _storage: Option<&dyn Storage>) {
+        let style: Style = serde_yaml::from_str(include_str!("./new-style.yaml")).unwrap();
+        ctx.set_style(style);
+    }
+
     fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
         let w = &mut self.0;
         egui::CentralPanel::default().show(ctx, |ui| {

@@ -1,0 +1,7 @@
+name: Loyalty Blue
+scheme:
+  dark-blue: [43, 41, 84]
+  deep-blue: [39, 41, 124]
+  medium-blue: [46, 104, 168]
+  gold: [250, 203, 17] # this is just a dark yellow, ideally we need a gradient or a pattern
+  white: [255, 255, 255]
