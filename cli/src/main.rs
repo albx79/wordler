@@ -5,36 +5,24 @@ fn main() {
     let mut game = Wordler::default();
 
     loop {
-        for (i, word) in game.attempts.iter().enumerate() {
-            let pad = if i != game.attempts.len() - 1 {
-                "    "
-            } else {
-                "Try "
-            };
-            println!("{pad}{word}", pad = pad, word = Color(word));
+        for word in game.attempts.iter() {
+            println!("    {word}", word = Color(word));
         }
-        match read_user_input(&mut game) {
+        println!("Try {word}", word = Color(&game.suggestion));
+        match read_user_input(&mut game.suggestion) {
             Err(_) => {
                 println!("Bye!");
                 return;
             }
-            Ok(filters) => {
-                game.add_filters(filters);
-                match game.suggest_word().map(Word::new) {
-                    Some(word) => {
-                        game.attempts.push(word);
-                    },
-                    None => {
-                        println!("I'm out of ideas");
-                        return;
-                    }
-                }
-            },
+            Ok(_) => if !game.next() {
+                println!("I'm out of ideas");
+                return;
+            }
         }
     }
 }
 
-fn read_user_input(game: &mut Wordler) -> Result<Vec<Cell>, ()> {
+fn read_user_input(suggestion: &mut Word) -> Result<(), ()> {
     loop {
         println!(
             r#"
@@ -49,14 +37,27 @@ Enter the game response using:
                 return Err(());
             }
         };
-        match str_to_filter(&response, &game.attempts.last().unwrap().to_string()) {
-            Some(filters) => {
-                return Ok(filters);
-            }
-            None => println!("Invalid response"),
+
+        match mutate_cells(&response, &mut suggestion.0) {
+            Ok(()) => return Ok(()),
+            _ => (),
         }
     }
+}
 
+pub fn mutate_cells(response: &str, cells: &mut [Cell]) -> Result<(), ()> {
+    for (position, (user_input, cell)) in response.to_ascii_uppercase().bytes().zip(cells.iter_mut()).enumerate() {
+        *cell = match user_input {
+            b'.' => Cell::Grey(cell.byte()),
+            b'Y' => Cell::Yellow { letter: cell.byte(), position },
+            b'G' => Cell::Green { letter: cell.byte(), position },
+            _ => {
+                println!("Invalid response");
+                return Err(());
+            }
+        }
+    }
+    return Ok(());
 }
 
 struct Color<'a>(&'a Word);
@@ -67,28 +68,13 @@ impl Display for Color<'_> {
         for cell in self.0.0.iter() {
             let letter = cell.letter().to_string();
             write!(f, "{}", match cell {
-                Cell::Yellow {..} => letter.bright_yellow().on_black(),
-                Cell::Green {..} => letter.bright_green().on_black(),
+                Cell::Yellow { .. } => letter.bright_yellow().on_black(),
+                Cell::Green { .. } => letter.bright_green().on_black(),
                 Cell::Grey(_) => letter.white().on_bright_black(),
             })?;
         }
         std::fmt::Result::Ok(())
     }
-}
-
-fn str_to_filter(input: &str, word: &str) -> Option<Vec<Cell>> {
-    let mut filters = vec![];
-    for (position, code) in input.to_ascii_uppercase().as_bytes().iter().enumerate() {
-        let letter = word.as_bytes().get(position).map(|l| *l);
-        let filter = match (*code, letter) {
-            (b'.', Some(letter)) => Cell::Grey(letter),
-            (b'Y', Some(letter)) => Cell::Yellow { letter, position },
-            (b'G', Some(letter)) => Cell::Green { letter, position },
-            _ => return None,
-        };
-        filters.push(filter);
-    }
-    Some(filters)
 }
 
 #[cfg(test)]
@@ -97,21 +83,28 @@ mod tests {
 
     #[test]
     fn test_str_to_filter() {
-        assert_eq!(str_to_filter("invalid response", "WORD"), None);
-        assert_eq!(str_to_filter(".", "WORD").unwrap()[0], Cell::Grey(b'W'));
-        assert_eq!(
-            str_to_filter("yG", "WORD").unwrap(),
-            vec![
-                Cell::Yellow {
-                    letter: b'W',
-                    position: 0
-                },
-                Cell::Green {
-                    letter: b'O',
-                    position: 1
-                }
-            ]
-        );
+        let mut cells = vec![
+            Cell::Yellow {
+                letter: b'W',
+                position: 0,
+            },
+            Cell::Green {
+                letter: b'O',
+                position: 1,
+            },
+            Cell::Grey(b'T'),
+        ];
+
+        mutate_cells("g.y", &mut cells).unwrap();
+
+        assert_eq!(cells, vec![
+            Cell::Green {
+                letter: b'W',
+                position: 0,
+            },
+            Cell::Grey(b'O'),
+            Cell::Yellow{ letter: b'T', position: 2},
+        ]);
     }
 
     #[test]
@@ -119,16 +112,17 @@ mod tests {
     fn guess_the_word_PROXY() {
         let mut game = Wordler::default();
 
-        for (resp, word) in [
-            ("..g..", "ATONE"),
-            ("..g.y", "CHOIR"),
-            ("..gy.", "SWORD"),
-            (".gg.y", "GROUP"),
-            ("ggg..", "PROMO"),
+        for resp in [
+            "..g..",
+            "..g.y",
+            "..gy.",
+            ".gg.y",
+            "ggg..",
         ] {
-            game.add_filters(str_to_filter(resp, word).unwrap());
+            mutate_cells(resp, &mut game.suggestion.0).unwrap();
+            game.next();
         }
 
-        assert_eq!(game.suggest_word(), Some("PROXY"));
+        assert_eq!(game.suggestion.to_string(), Word::new("THONG").to_string());
     }
 }

@@ -7,8 +7,9 @@ pub mod frequency;
 
 pub struct Wordler {
     pub attempts: Vec<Word>,
+    pub suggestion: Word,
     pub filters: BTreeSet<Cell>,
-    pub words: Vec<String>,
+    pub dictionary: Vec<String>,
     pub frequencies: frequency::FreqTable,
     pub scoring_functions: Vec<Box<dyn Score>>,
     pub scoring_idx: usize,
@@ -16,20 +17,21 @@ pub struct Wordler {
 
 impl Default for Wordler {
     fn default() -> Self {
-        let words = frequency::english_words();
-        let frequencies = frequency::frequencies(words.iter().map(|s| s.as_str()));
+        let dictionary = frequency::english_words();
+        let frequencies = frequency::frequencies(dictionary.iter().map(|s| s.as_str()));
         let scoring_functions: Vec<Box<dyn Score>> = vec![
             Box::new(SumUnique(frequencies.clone())),
             Box::new(MulUnique(frequencies.clone())),
         ];
-        let first_word = suggest_word(&words, &BTreeSet::new(), scoring_functions[0].as_ref())
+        let suggestion = suggest_word(&dictionary, &BTreeSet::new(), scoring_functions[0].as_ref())
             .map(Word::new)
             .unwrap();
         Wordler {
-            words,
+            suggestion,
+            dictionary,
             frequencies,
             scoring_functions,
-            attempts: vec![first_word],
+            attempts: vec![],
             filters: BTreeSet::new(),
             scoring_idx: 0,
         }
@@ -47,7 +49,7 @@ fn suggest_word<'a, 'b>(words: &'a[String], filters: &BTreeSet<Cell>, score: &dy
 
 impl Wordler {
 
-    pub fn add_filters(&mut self, filters: impl IntoIterator<Item=Cell>) {
+    fn add_filters(&mut self, filters: impl IntoIterator<Item=Cell>) {
         let new_filters = filters.into_iter()
             .filter(|filter| self.is_compatible(&filter))
             .collect::<Vec<_>>();
@@ -68,43 +70,47 @@ impl Wordler {
     }
 
     pub fn undo(&mut self) {
-        self.attempts.remove(self.attempts.len() - 1);
+        self.suggestion = self.attempts.remove(self.attempts.len() - 1);
         self.filters = BTreeSet::new();
-        let old_attempts = std::mem::take(&mut self.attempts);
-        old_attempts.iter().rev().skip(1).for_each(|word| self.add_filters(word.0.clone()));
-        self.attempts = old_attempts;
+        let old_attempts = self.attempts.clone();
+        old_attempts.iter().for_each(|word| self.add_filters(word.0.clone()));
     }
 
     pub fn not_a_word(&mut self) {
-        let ceci_nest_pas_un_mot = self.attempts[self.attempts.len() - 1].clone();
+        if self.attempts.is_empty() {
+            return;
+        }
+        let ceci_nest_pas_un_mot = self.suggestion.clone();
         self.undo();
-        let idx_of_not_word = self.words.iter().enumerate()
+
+        let idx_of_not_word = self.dictionary.iter().enumerate()
             .find(|(_, w)| w == &&ceci_nest_pas_un_mot.to_string())
             .map(|(i, _)| i)
             .unwrap();
-        self.words.swap_remove(idx_of_not_word);
+        self.dictionary.swap_remove(idx_of_not_word);
+        self.next();
     }
 
-    pub fn next(&mut self) {
-        let last_word = self.attempts.last().unwrap().clone();
-        self.add_filters(last_word.0.clone());
-        match self.suggest_word() {
+    /// Tries to guess another word, and returns `false` if it can't.
+    pub fn next(&mut self) -> bool {
+        self.add_filters(self.suggestion.0.clone());
+        let new_suggestion = self.suggest_word().map(Word::new);
+        match new_suggestion {
             Some(word)  => {
-                let next_word = last_word.next(word);
-                self.attempts.push(next_word);
+                self.attempts.push(self.suggestion.clone());
+                self.suggestion = self.suggestion.next(word);
+                return true;
             }
-            _ => (),
+            _ => return false,
         }
     }
 
     pub fn reset(&mut self) {
-        self.attempts = vec![];
-        self.filters = BTreeSet::new();
-        self.attempts.push(Word::new(self.suggest_word().unwrap()));
+        *self = Wordler::default();
     }
 
     pub fn suggest_word(&self) -> Option<&str> {
-        suggest_word(&self.words, &self.filters, self.score())
+        suggest_word(&self.dictionary, &self.filters, self.score())
     }
 
     fn score(&self) -> &dyn Score {
@@ -112,7 +118,7 @@ impl Wordler {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Word(pub Vec<Cell>);
 
 impl std::string::ToString for Word {
@@ -127,8 +133,7 @@ impl Word {
         Word(letters)
     }
 
-    pub fn next(&self, input: &str) -> Self {
-        let mut letters = Word::new(input);
+    pub fn next(&self, mut letters: Word) -> Self {
         for (i, letter) in letters.enumerate() {
             let letter_in_prev_word = self.0[i];
             match letter_in_prev_word {
@@ -177,13 +182,17 @@ impl Cell {
         }
     }
 
-    pub fn letter(&self) -> char {
+    pub fn byte(&self) -> u8 {
         use Cell::*;
         *match self {
             Grey(letter) => letter,
             Yellow { letter, .. } => letter,
             Green { letter, .. } => letter
-        } as char
+        }
+    }
+
+    pub fn letter(&self) -> char {
+        self.byte() as char
     }
 
     pub fn cycle(&self, position: usize) -> Cell {

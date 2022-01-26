@@ -33,7 +33,7 @@ impl epi::App for Gui {
         let w = &mut self.0;
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical(|ui|{
-                ui.add_enabled_ui(w.attempts.len() == 1, |ui| {
+                ui.add_enabled_ui(w.attempts.is_empty(), |ui| {
                     let update_scoring_fn = egui::ComboBox::from_label("Scoring function")
                         .selected_text(w.scoring_functions[w.scoring_idx].name())
                         .show_index(ui, &mut w.scoring_idx, w.scoring_functions.len(), |i| {
@@ -47,28 +47,24 @@ impl epi::App for Gui {
 
                 egui::Grid::new("main grid")
                     .show(ui, |ui| {
-                        let num_attempts = w.attempts.len();
-                        let mut next_word = false;
-                        let mut undo_word = false;
-                        let mut not_a_word = false;
-                        for (row, word) in w.attempts.iter_mut().enumerate() {
-                            let is_last_row = row == num_attempts - 1;
-                            let show_more_btns = is_last_row && row != 0;
-                            ui.add_enabled_ui(is_last_row, |ui| {
+                        for word in w.attempts.iter_mut() {
+                            ui.add_enabled_ui(false, |ui| {
                                 word_ui(word, ui);
-                                next_word = ui.button("Next").clicked();
-                                undo_word =  show_more_btns && ui.button("Undo").clicked();
-                                not_a_word = show_more_btns && ui.button("Not a word").clicked();
                             });
                             ui.end_row();
                         }
-                        if next_word {
-                            w.next();
-                        } else if undo_word {
-                            w.undo();
-                        } else if not_a_word {
-                            w.not_a_word();
-                        }
+                        ui.add_enabled_ui(true, |ui| {
+                            word_ui(&mut w.suggestion, ui);
+                            let show_more_btns = !w.attempts.is_empty();
+                            if ui.button("Next").clicked() {
+                                w.next();
+                            } else if show_more_btns && ui.button("Undo").clicked() {
+                                w.undo();
+                            } else if show_more_btns && ui.button("Not a word").clicked() {
+                                w.not_a_word();
+                            }
+                            ui.end_row();
+                        })
                     });
                 ui.separator();
                 if ui.button("Reset").clicked() {
