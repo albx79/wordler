@@ -50,12 +50,15 @@ impl epi::App for Gui {
                         let num_attempts = w.attempts.len();
                         let mut next_word = false;
                         let mut undo_word = false;
+                        let mut not_a_word = false;
                         for (row, word) in w.attempts.iter_mut().enumerate() {
                             let is_last_row = row == num_attempts - 1;
+                            let show_more_btns = is_last_row && row != 0;
                             ui.add_enabled_ui(is_last_row, |ui| {
                                 word_ui(word, ui);
                                 next_word = ui.button("Next").clicked();
-                                undo_word = is_last_row && row != 0 && ui.button("Undo").clicked();
+                                undo_word =  show_more_btns && ui.button("Undo").clicked();
+                                not_a_word = show_more_btns && ui.button("Not a word").clicked();
                             });
                             ui.end_row();
                         }
@@ -63,6 +66,8 @@ impl epi::App for Gui {
                             w.next();
                         } else if undo_word {
                             w.undo();
+                        } else if not_a_word {
+                            w.not_a_word();
                         }
                     });
                 ui.separator();

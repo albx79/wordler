@@ -68,14 +68,21 @@ impl Wordler {
     }
 
     pub fn undo(&mut self) {
-        if self.attempts.len() < 2 {
-            return;
-        }
         self.attempts.remove(self.attempts.len() - 1);
         self.filters = BTreeSet::new();
         let old_attempts = std::mem::take(&mut self.attempts);
-        old_attempts.iter().for_each(|word| self.add_filters(word.0.clone()));
+        old_attempts.iter().rev().skip(1).for_each(|word| self.add_filters(word.0.clone()));
         self.attempts = old_attempts;
+    }
+
+    pub fn not_a_word(&mut self) {
+        let ceci_nest_pas_un_mot = self.attempts[self.attempts.len() - 1].clone();
+        self.undo();
+        let idx_of_not_word = self.words.iter().enumerate()
+            .find(|(_, w)| w == &&ceci_nest_pas_un_mot.to_string())
+            .map(|(i, _)| i)
+            .unwrap();
+        self.words.swap_remove(idx_of_not_word);
     }
 
     pub fn next(&mut self) {
