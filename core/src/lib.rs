@@ -98,7 +98,7 @@ impl Wordler {
         match new_suggestion {
             Some(word)  => {
                 self.attempts.push(self.suggestion.clone());
-                self.suggestion = self.suggestion.next(word);
+                self.suggestion = self.suggestion.paint_new_word(word);
                 return true;
             }
             _ => return false,
@@ -135,15 +135,20 @@ impl Word {
         Word(letters)
     }
 
-    pub fn next(&self, mut letters: Word) -> Self {
-        for (i, letter) in letters.enumerate() {
-            let letter_in_prev_word = self.0[i];
-            match letter_in_prev_word {
-                Cell::Green { .. } => *letter = letter_in_prev_word,
+    /// Colour the cells of a new word based on the cells of this word (i.e. maintain the
+    /// colour of green and yellow cells)
+    pub fn paint_new_word(&self, mut new_word: Word) -> Self {
+        for (i, letter) in self.0.iter().enumerate() {
+            match letter {
+                Cell::Green { .. } => new_word.0[i] = *letter,
+                Cell::Yellow { .. } => {
+                    let same_letter_in_new_word = new_word.0.iter_mut().find_position(|l| l.byte()==letter.byte()).unwrap().0;
+                    new_word.0[same_letter_in_new_word] = *letter;
+                },
                 _ => (),
             }
         }
-        letters
+        new_word
     }
 
     pub fn enumerate(&mut self) -> impl Iterator<Item=(usize, &mut Cell)> {

@@ -109,20 +109,17 @@ mod tests {
 
     #[test]
     #[allow(non_snake_case)]
-    fn guess_the_word_PROXY() {
+    fn guess_a_word() {
         let mut game = Wordler::default();
 
         for resp in [
-            "..g..",
-            "..g.y",
-            "..gy.",
-            ".gg.y",
-            "ggg..",
+            "y.y.g",
+            ".y.yg",
         ] {
             mutate_cells(resp, &mut game.suggestion.0).unwrap();
             game.next();
         }
 
-        assert_eq!(game.suggestion.to_string(), Word::new("THONG").to_string());
+        assert_eq!(game.suggestion.to_string(), Word::new("OVATE").to_string());
     }
 }
