@@ -106,10 +106,12 @@ impl Wordler {
     }
 
     pub fn reset(&mut self) {
-        *self = Wordler::default();
+        self.attempts = vec![];
+        self.filters = BTreeSet::new();
+        self.suggestion = Word::new(self.suggest_word().unwrap());
     }
 
-    pub fn suggest_word(&self) -> Option<&str> {
+    pub(crate) fn suggest_word(&self) -> Option<&str> {
         suggest_word(&self.dictionary, &self.filters, self.score())
     }
 
