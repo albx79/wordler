@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=false
+Exec=./AppRun
+Name=Wordler
+Categories=Game
+Icon=wordler
+
