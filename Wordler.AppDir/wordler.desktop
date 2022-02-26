@@ -4,6 +4,6 @@ Type=Application
 Terminal=false
 Exec=./AppRun
 Name=Wordler
-Categories=Game
+Categories=Game;
 Icon=wordler
 
