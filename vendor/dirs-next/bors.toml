@@ -1,0 +1,4 @@
+status = ["bors build finished"]
+
+# Default timeout is one hour
+timeout_sec = 600

@@ -1,0 +1,13 @@
+app-id: it.albx79.Wordler
+runtime: org.freedesktop.Platform
+runtime-version: '21.08'
+sdk: org.freedesktop.Sdk.Extension.rust-stable
+command: wordler-gui
+modules:
+  - name: wordler
+    buildsystem: simple
+    build-commands:
+      - install -D wordler-gui /app/bin/wordler-gui
+    sources:
+      - type: dir
+        path: ./
