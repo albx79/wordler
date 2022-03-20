@@ -1,13 +1,20 @@
 app-id: it.albx79.Wordler
-runtime: org.freedesktop.Platform
+runtime: org.freedesktop.Platform.GL.default
 runtime-version: '21.08'
-sdk: org.freedesktop.Sdk.Extension.rust-stable
+sdk: org.freedesktop.Sdk
+sdk-extensions: [org.freedesktop.Sdk.Extension.rust-stable]
 command: wordler-gui
+build-options:
+  append-path: "/usr/lib/sdk/rust-stable/bin"
+  env:
+    CARGO_HOME : /run/build/wordler/cargo
 modules:
-  - name: wordler
+  - name: wordler-gui
     buildsystem: simple
     build-commands:
-      - install -D wordler-gui /app/bin/wordler-gui
+      - cargo build --release
+      - mkdir -p /app/bin
+      - install -Dm 755 target/release/wordler-gui -t /app/bin/
     sources:
       - type: dir
         path: ./
