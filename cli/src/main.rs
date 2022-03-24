@@ -9,7 +9,7 @@ fn main() {
             println!("    {word}", word = Color(word));
         }
         println!("Try {word}", word = Color(&game.suggestion));
-        match read_user_input(&mut game.suggestion) {
+        match read_user_input(&mut game) {
             Err(_) => {
                 println!("Bye!");
                 return;
@@ -22,14 +22,15 @@ fn main() {
     }
 }
 
-fn read_user_input(suggestion: &mut Word) -> Result<(), ()> {
+fn read_user_input(game: &mut Wordler) -> Result<(), ()> {
     loop {
         println!(
             r#"
 Enter the game response using:
 "G" or "g" for a Green letter (you got it in the right position)
 "Y" or "y" for a Yellow letter (you got it, but in the wrong position)
-"." for a grey letter (you didn't get it)"#
+"." for a grey letter (you didn't get it)
+"N" for "not a word"."#
         );
         let response = match promptly::prompt::<String, _>("Response") {
             Ok(r) => r,
@@ -38,15 +39,21 @@ Enter the game response using:
             }
         };
 
-        match mutate_cells(&response, &mut suggestion.0) {
-            Ok(()) => return Ok(()),
-            _ => (),
+        let response = response.to_ascii_uppercase();
+        if &response == "N" {
+            game.not_a_word();
+            return Ok(())
+        } else {
+            match mutate_cells(&response, &mut game.suggestion.0) {
+                Ok(()) => return Ok(()),
+                _ => (),
+            }
         }
     }
 }
 
 pub fn mutate_cells(response: &str, cells: &mut [Cell]) -> Result<(), ()> {
-    for (position, (user_input, cell)) in response.to_ascii_uppercase().bytes().zip(cells.iter_mut()).enumerate() {
+    for (position, (user_input, cell)) in response.bytes().zip(cells.iter_mut()).enumerate() {
         *cell = match user_input {
             b'.' => Cell::Grey(cell.byte()),
             b'Y' => Cell::Yellow { letter: cell.byte(), position },
